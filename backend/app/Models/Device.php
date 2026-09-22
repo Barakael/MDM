@@ -72,6 +72,34 @@ class Device extends Model
         return $this->hasMany(DeviceCertificate::class);
     }
 
+    public function tokens(): HasMany
+    {
+        return $this->hasMany(DeviceToken::class);
+    }
+
+    public function pushToken(): ?DeviceToken
+    {
+        return $this->tokens()->latest('updated_at')->first();
+    }
+
+    public function pushSummary(): array
+    {
+        $token = $this->relationLoaded('tokens')
+            ? $this->tokens->sortByDesc('updated_at')->first()
+            : $this->pushToken();
+
+        if (! $token) {
+            return [
+                'topic' => null,
+                'has_token' => false,
+                'has_push_magic' => false,
+                'updated_at' => null,
+            ];
+        }
+
+        return $token->summary();
+    }
+
     public function resolvedEngine(): MdmEngineType
     {
         return $this->mdm_engine
