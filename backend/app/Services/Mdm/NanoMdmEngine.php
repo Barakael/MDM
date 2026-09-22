@@ -13,7 +13,8 @@ class NanoMdmEngine implements MdmEngine
 {
     public function getDeviceInformation(Device $device): array
     {
-        return $this->enqueue($device, 'DeviceInformation', [
+        return $this->enqueue($device, [
+            'RequestType' => 'DeviceInformation',
             'Queries' => [
                 'DeviceName',
                 'OSVersion',
@@ -27,7 +28,8 @@ class NanoMdmEngine implements MdmEngine
 
     public function lock(Device $device, array $data = []): array
     {
-        return $this->enqueue($device, 'DeviceLock', array_filter([
+        return $this->enqueue($device, array_filter([
+            'RequestType' => 'DeviceLock',
             'PIN' => $data['pin'] ?? null,
             'Message' => $data['message'] ?? null,
             'PhoneNumber' => $data['phone_number'] ?? null,
@@ -36,7 +38,8 @@ class NanoMdmEngine implements MdmEngine
 
     public function enableLostMode(Device $device, array $data = []): array
     {
-        return $this->enqueue($device, 'EnableLostMode', [
+        return $this->enqueue($device, [
+            'RequestType' => 'EnableLostMode',
             'Message' => $data['message'] ?? 'This device has been lost. Please call.',
             'PhoneNumber' => $data['phone_number'] ?? '',
             'Footnote' => $data['footnote'] ?? '',
@@ -45,41 +48,45 @@ class NanoMdmEngine implements MdmEngine
 
     public function disableLostMode(Device $device): array
     {
-        return $this->enqueue($device, 'DisableLostMode', []);
+        return $this->enqueue($device, ['RequestType' => 'DisableLostMode']);
     }
 
     public function erase(Device $device, array $data = []): array
     {
-        return $this->enqueue($device, 'EraseDevice', array_filter([
+        return $this->enqueue($device, array_filter([
+            'RequestType' => 'EraseDevice',
             'PIN' => $data['pin'] ?? null,
         ]));
     }
 
     public function installProfile(Device $device, string $profile): array
     {
-        return $this->enqueue($device, 'InstallProfile', [
-            'Payload' => base64_encode($profile),
+        return $this->enqueue($device, [
+            'RequestType' => 'InstallProfile',
+            'Payload' => $profile,
         ]);
     }
 
     public function removeProfile(Device $device, string $profile): array
     {
-        return $this->enqueue($device, 'RemoveProfile', [
+        return $this->enqueue($device, [
+            'RequestType' => 'RemoveProfile',
             'Identifier' => $profile,
         ]);
     }
 
-    protected function enqueue(Device $device, string $requestType, array $payload): array
+    protected function enqueue(Device $device, array $command): array
     {
         if (! $device->udid) {
             throw new RuntimeException('Device UDID is required to send MDM commands.');
         }
 
         $commandUuid = (string) Str::uuid();
-        $body = array_merge(['RequestType' => $requestType, 'CommandUUID' => $commandUuid], $payload);
+        $plist = NanoMdmPlistBuilder::command($commandUuid, $command);
 
         $response = $this->client()
-            ->put("/v1/commands/{$device->udid}", $body);
+            ->withBody($plist, 'application/x-apple-aspen-config')
+            ->put("/v1/enqueue/{$device->udid}", []);
 
         if ($response->failed()) {
             throw new RuntimeException(
@@ -87,11 +94,13 @@ class NanoMdmEngine implements MdmEngine
             );
         }
 
+        $json = $response->json() ?? [];
+
         return [
             'engine' => MdmEngineType::Nano->value,
-            'command_uuid' => $commandUuid,
-            'request_type' => $requestType,
-            'response' => $response->json() ?? ['raw' => $response->body()],
+            'command_uuid' => $json['command_uuid'] ?? $commandUuid,
+            'request_type' => $json['request_type'] ?? ($command['RequestType'] ?? null),
+            'response' => $json ?: ['raw' => $response->body()],
         ];
     }
 
@@ -103,8 +112,10 @@ class NanoMdmEngine implements MdmEngine
             ->timeout($config['timeout'] ?? 30)
             ->acceptJson();
 
-        if (! empty($config['api_key'])) {
-            $client = $client->withToken($config['api_key']);
+        $apiKey = $config['api_key'] ?? '';
+        if ($apiKey !== '') {
+            // NanoMDM API auth: HTTP Basic, username is always "nanomdm".
+            $client = $client->withBasicAuth('nanomdm', $apiKey);
         }
 
         return $client;
