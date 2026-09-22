@@ -12,19 +12,39 @@ type Enrollment = {
 
 type Org = { id: number; name: string }
 
+type MdmUrls = {
+  public_url: string
+  scep_url: string
+  topic: string
+  topic_configured: boolean
+}
+
+type ProfileEndpoints = {
+  server_url: string
+  scep_url: string
+  topic: string
+}
+
 export default function EnrollmentPage() {
   const [items, setItems] = useState<Enrollment[]>([])
   const [orgs, setOrgs] = useState<Org[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [createdUrl, setCreatedUrl] = useState<string | null>(null)
+  const [profileEndpoints, setProfileEndpoints] = useState<ProfileEndpoints | null>(null)
+  const [mdmUrls, setMdmUrls] = useState<MdmUrls | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function load() {
-    const [enrollments, organizations] = await Promise.all([
+    const [enrollments, organizations, status] = await Promise.all([
       api.get('/enrollments'),
       api.get('/organizations'),
+      api.get('/mdm/status').catch(() => null),
     ])
     setItems(enrollments.data.data.data ?? enrollments.data.data)
     setOrgs(organizations.data.data)
+    if (status?.data?.data?.urls) {
+      setMdmUrls(status.data.data.urls)
+    }
     if (!organizationId && organizations.data.data[0]) {
       setOrganizationId(String(organizations.data.data[0].id))
     }
@@ -37,20 +57,45 @@ export default function EnrollmentPage() {
 
   async function onCreate(e: FormEvent) {
     e.preventDefault()
-    const { data } = await api.post('/enrollments', {
-      organization_id: Number(organizationId),
-      method: 'configurator',
-    })
-    setCreatedUrl(data.enrollment_url)
-    await load()
+    setError(null)
+    try {
+      const { data } = await api.post('/enrollments', {
+        organization_id: Number(organizationId),
+        method: 'configurator',
+      })
+      setCreatedUrl(data.enrollment_url)
+      setProfileEndpoints(data.profile_endpoints ?? null)
+      await load()
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { message?: string } } }
+      setError(ax.response?.data?.message || 'Failed to create enrollment. Check NANO_MDM_TOPIC / public URLs in .env.')
+    }
   }
 
   return (
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Enrollment</h1>
       <p className="mt-1 text-[var(--text-muted)]">
-        Apple Configurator enrollment → URL → configuration → status. ABM comes later.
+        Creates a real NanoMDM + SCEP profile from .env. After deploy, flip public URLs and create new enrollments.
       </p>
+
+      {mdmUrls && (
+        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/60 p-4 text-sm">
+          <div className="font-medium">Configured endpoints (.env)</div>
+          <dl className="mt-2 grid gap-1 text-[var(--text-muted)]">
+            <div>
+              <span className="text-white">ServerURL base:</span> {mdmUrls.public_url || '—'}
+            </div>
+            <div>
+              <span className="text-white">SCEP:</span> {mdmUrls.scep_url || '—'}
+            </div>
+            <div>
+              <span className="text-white">Topic:</span>{' '}
+              {mdmUrls.topic_configured ? mdmUrls.topic : 'NANO_MDM_TOPIC not set'}
+            </div>
+          </dl>
+        </div>
+      )}
 
       <form onSubmit={onCreate} className="mt-6 flex max-w-xl flex-wrap gap-2">
         <select
@@ -69,10 +114,21 @@ export default function EnrollmentPage() {
         </button>
       </form>
 
+      {error && <p className="mt-4 text-sm text-[var(--danger)]">{error}</p>}
+
       {createdUrl && (
-        <p className="mt-4 break-all rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-sm">
-          Enrollment URL: <span className="text-[var(--accent)]">{createdUrl}</span>
-        </p>
+        <div className="mt-4 space-y-2 break-all rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-sm">
+          <p>
+            Enrollment URL: <span className="text-[var(--accent)]">{createdUrl}</span>
+          </p>
+          {profileEndpoints && (
+            <>
+              <p className="text-[var(--text-muted)]">Profile ServerURL: {profileEndpoints.server_url}</p>
+              <p className="text-[var(--text-muted)]">Profile SCEP: {profileEndpoints.scep_url}</p>
+              <p className="text-[var(--text-muted)]">Topic: {profileEndpoints.topic}</p>
+            </>
+          )}
+        </div>
       )}
 
       <ul className="mt-6 space-y-2">
@@ -87,6 +143,11 @@ export default function EnrollmentPage() {
             </div>
           </li>
         ))}
+        {items.length === 0 && (
+          <li className="rounded-lg border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm text-[var(--text-muted)]">
+            No enrollments yet.
+          </li>
+        )}
       </ul>
     </div>
   )
