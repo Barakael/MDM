@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import DeviceActionsPanel from '../components/DeviceActionsPanel'
 import api from '../lib/api'
+import { commandTypeLabel } from '../lib/commandLabels'
 
 type Tab =
   | 'information'
@@ -11,6 +13,13 @@ type Tab =
   | 'restrictions'
   | 'events'
   | 'audit'
+
+type PushSummary = {
+  topic: string | null
+  has_token: boolean
+  has_push_magic: boolean
+  updated_at: string | null
+}
 
 type Device = {
   id: number
@@ -25,6 +34,7 @@ type Device = {
   enrollment_status: string
   mdm_engine: string | null
   last_contact_at: string | null
+  push?: PushSummary
   commands?: Command[]
   applications?: { id: number; name: string; bundle_identifier: string; version: string }[]
   profiles?: { id: number; display_name: string; profile_identifier: string }[]
@@ -54,6 +64,8 @@ const tabs: { id: Tab; label: string }[] = [
   { id: 'audit', label: 'Audit Logs' },
 ]
 
+const inflight = new Set(['created', 'queued', 'sent', 'device_connected'])
+
 export default function DeviceDetailPage() {
   const { id } = useParams()
   const [device, setDevice] = useState<Device | null>(null)
@@ -61,6 +73,7 @@ export default function DeviceDetailPage() {
   const [tab, setTab] = useState<Tab>('information')
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [highlightCommandId, setHighlightCommandId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     const { data } = await api.get(`/devices/${id}`)
@@ -72,12 +85,23 @@ export default function DeviceDetailPage() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    const hasInflight = (device?.commands || []).some((c) => inflight.has(c.status))
+    if (!hasInflight) return
+    const timer = window.setInterval(() => {
+      void load()
+    }, 4000)
+    return () => window.clearInterval(timer)
+  }, [device?.commands, load])
+
   async function runAction(action: string, body: Record<string, unknown> = {}) {
     setBusy(action)
     setMessage(null)
     try {
       const { data } = await api.post(`/devices/${id}/${action}`, body)
-      setMessage(`Command queued: ${data.data.command_type} (${data.data.status})`)
+      const command = data.data
+      setMessage(`Queued: ${commandTypeLabel(command.command_type)} (${command.status})`)
+      setHighlightCommandId(command.id)
       await load()
       setTab('commands')
     } catch (err: unknown) {
@@ -106,6 +130,14 @@ export default function DeviceDetailPage() {
             <dd className="mt-1 font-medium">{device.is_online ? 'Online' : 'Offline'}</dd>
           </div>
           <div>
+            <dt className="text-[var(--text-muted)]">Enrollment</dt>
+            <dd className="mt-1 font-medium capitalize">{device.enrollment_status}</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--text-muted)]">Management</dt>
+            <dd className="mt-1 font-medium capitalize">{device.management_status}</dd>
+          </div>
+          <div>
             <dt className="text-[var(--text-muted)]">Supervised</dt>
             <dd className="mt-1 font-medium">{device.supervised ? 'Yes' : 'No'}</dd>
           </div>
@@ -127,34 +159,18 @@ export default function DeviceDetailPage() {
             <dt className="text-[var(--text-muted)]">UDID</dt>
             <dd className="mt-1 font-mono text-xs">{device.udid || '—'}</dd>
           </div>
+          <div>
+            <dt className="text-[var(--text-muted)]">APNs</dt>
+            <dd className="mt-1 font-medium">
+              {device.push?.has_token ? 'Token present' : 'No token'}
+              {device.push?.topic ? (
+                <div className="mt-1 font-mono text-xs text-[var(--text-muted)] break-all">{device.push.topic}</div>
+              ) : null}
+            </dd>
+          </div>
         </dl>
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          <ActionButton label="Refresh" busy={busy === 'refresh'} onClick={() => runAction('refresh')} />
-          <ActionButton label="Lock" busy={busy === 'lock'} onClick={() => runAction('lock')} />
-          <ActionButton
-            label="Lost Mode"
-            busy={busy === 'lost-mode'}
-            onClick={() =>
-              runAction('lost-mode', {
-                message: 'This device has been reported lost.',
-                phone_number: '',
-              })
-            }
-          />
-          <ActionButton label="Release" busy={busy === 'release'} onClick={() => runAction('release')} />
-          <ActionButton
-            label="Erase"
-            danger
-            busy={busy === 'erase'}
-            onClick={() => {
-              if (window.confirm('Erase this device? This cannot be undone.')) {
-                void runAction('erase', { confirm: true })
-              }
-            }}
-          />
-        </div>
-        {message && <p className="mt-4 text-sm text-[var(--accent)]">{message}</p>}
+        <DeviceActionsPanel device={device} busy={busy} message={message} onAction={runAction} />
       </section>
 
       <div className="mt-6 flex flex-wrap gap-2 border-b border-[var(--border)] pb-2">
@@ -181,10 +197,14 @@ export default function DeviceDetailPage() {
               ['Management', device.management_status],
               ['Enrollment', device.enrollment_status],
               ['Override engine', device.mdm_engine || 'inherit (.env)'],
+              ['Push topic', device.push?.topic || '—'],
+              ['Push magic', device.push?.has_push_magic ? 'Present' : 'Missing'],
             ]}
           />
         )}
-        {tab === 'commands' && <CommandsTable commands={device.commands || []} />}
+        {tab === 'commands' && (
+          <CommandsTable commands={device.commands || []} highlightId={highlightCommandId} />
+        )}
         {tab === 'applications' && (
           <SimpleList
             empty="No applications reported."
@@ -205,7 +225,9 @@ export default function DeviceDetailPage() {
             )}
           />
         )}
-        {tab === 'restrictions' && <p className="text-sm text-[var(--text-muted)]">Restrictions will appear after inventory sync.</p>}
+        {tab === 'restrictions' && (
+          <p className="text-sm text-[var(--text-muted)]">Restrictions will appear after inventory sync.</p>
+        )}
         {tab === 'events' && (
           <SimpleList
             empty="No events."
@@ -214,38 +236,15 @@ export default function DeviceDetailPage() {
         )}
         {tab === 'audit' && (
           <p className="text-sm text-[var(--text-muted)]">
-            See organization-wide entries in <Link className="text-[var(--accent)]" to="/audit-logs">Audit Logs</Link>.
+            See organization-wide entries in{' '}
+            <Link className="text-[var(--accent)]" to="/audit-logs">
+              Audit Logs
+            </Link>
+            .
           </p>
         )}
       </div>
     </div>
-  )
-}
-
-function ActionButton({
-  label,
-  onClick,
-  busy,
-  danger,
-}: {
-  label: string
-  onClick: () => void
-  busy?: boolean
-  danger?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      disabled={!!busy}
-      onClick={onClick}
-      className={`rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 ${
-        danger
-          ? 'bg-[var(--danger)]/15 text-[var(--danger)] hover:bg-[var(--danger)]/25'
-          : 'bg-[var(--bg-muted)] text-white hover:bg-[var(--border)]'
-      }`}
-    >
-      {busy ? '…' : label}
-    </button>
   )
 }
 
@@ -255,14 +254,14 @@ function InfoGrid({ rows }: { rows: [string, string | null | undefined][] }) {
       {rows.map(([k, v]) => (
         <div key={k}>
           <dt className="text-[var(--text-muted)]">{k}</dt>
-          <dd className="mt-1 capitalize">{v || '—'}</dd>
+          <dd className="mt-1 break-all">{v || '—'}</dd>
         </div>
       ))}
     </dl>
   )
 }
 
-function CommandsTable({ commands }: { commands: Command[] }) {
+function CommandsTable({ commands, highlightId }: { commands: Command[]; highlightId: number | null }) {
   if (!commands.length) return <p className="text-sm text-[var(--text-muted)]">No commands yet.</p>
   return (
     <div className="overflow-x-auto">
@@ -273,16 +272,25 @@ function CommandsTable({ commands }: { commands: Command[] }) {
             <th className="py-2 pr-4">Status</th>
             <th className="py-2 pr-4">Engine</th>
             <th className="py-2 pr-4">Created</th>
+            <th className="py-2 pr-4">Sent</th>
+            <th className="py-2 pr-4">Completed</th>
             <th className="py-2">Error</th>
           </tr>
         </thead>
         <tbody>
           {commands.map((c) => (
-            <tr key={c.id} className="border-t border-[var(--border)]">
-              <td className="py-2 pr-4">{c.command_type}</td>
+            <tr
+              key={c.id}
+              className={`border-t border-[var(--border)] ${
+                highlightId === c.id ? 'bg-[var(--accent)]/10' : ''
+              }`}
+            >
+              <td className="py-2 pr-4">{commandTypeLabel(c.command_type)}</td>
               <td className="py-2 pr-4 capitalize">{c.status}</td>
               <td className="py-2 pr-4">{c.engine}</td>
               <td className="py-2 pr-4">{new Date(c.created_at).toLocaleString()}</td>
+              <td className="py-2 pr-4">{c.sent_at ? new Date(c.sent_at).toLocaleString() : '—'}</td>
+              <td className="py-2 pr-4">{c.completed_at ? new Date(c.completed_at).toLocaleString() : '—'}</td>
               <td className="py-2 text-[var(--danger)]">{c.error || '—'}</td>
             </tr>
           ))}
