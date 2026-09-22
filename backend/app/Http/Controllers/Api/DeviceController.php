@@ -19,7 +19,7 @@ class DeviceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Device::query()->with('organization')->orderByDesc('updated_at');
+        $query = Device::query()->with(['organization', 'tokens'])->orderByDesc('updated_at');
 
         if (! $user->isSuperAdmin()) {
             $query->where('organization_id', $user->organization_id);
@@ -36,7 +36,9 @@ class DeviceController extends Controller
             });
         }
 
-        return response()->json(['data' => $query->paginate(25)]);
+        return response()->json([
+            'data' => $query->paginate(25)->through(fn (Device $device) => $this->presentDevice($device)),
+        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -82,6 +84,7 @@ class DeviceController extends Controller
 
         $device->load([
             'organization',
+            'tokens',
             'commands' => fn ($q) => $q->latest()->limit(50),
             'applications',
             'profiles',
@@ -90,7 +93,7 @@ class DeviceController extends Controller
         ]);
 
         return response()->json([
-            'data' => $device,
+            'data' => $this->presentDevice($device, detailed: true),
             'resolved_engine' => $device->resolvedEngine()->value,
         ]);
     }
@@ -178,5 +181,23 @@ class DeviceController extends Controller
         $command = $commands->dispatch($device, $type, $request->user(), $payload);
 
         return response()->json(['data' => $command], 202);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function presentDevice(Device $device, bool $detailed = false): array
+    {
+        $data = $device->toArray();
+        $data['push'] = $device->pushSummary();
+        $data['resolved_engine'] = $device->resolvedEngine()->value;
+
+        if (! $detailed) {
+            unset($data['raw_info'], $data['tokens']);
+        } else {
+            unset($data['tokens']);
+        }
+
+        return $data;
     }
 }
