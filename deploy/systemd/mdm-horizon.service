@@ -1,0 +1,15 @@
+[Unit]
+Description=MDM Platform Horizon queue worker
+After=network.target redis-server.service mdm-laravel.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/mdm.wayda.co.tz/backend
+ExecStart=/usr/bin/php artisan horizon
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
