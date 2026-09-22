@@ -6,11 +6,15 @@ use App\Http\Controllers\Api\CommandController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\EnrollmentController;
+use App\Http\Controllers\Api\MdmStatusController;
+use App\Http\Controllers\Api\NanoMdmWebhookController;
 use App\Http\Controllers\Api\OrganizationController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+    Route::post('/webhooks/nanomdm', NanoMdmWebhookController::class);
+
     Route::post('/auth/login', [AuthController::class, 'login']);
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -18,6 +22,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
 
         Route::get('/dashboard', DashboardController::class);
+        Route::get('/mdm/status', MdmStatusController::class);
 
         Route::apiResource('organizations', OrganizationController::class)->except(['destroy']);
         Route::apiResource('users', UserController::class)->only(['index', 'store']);
