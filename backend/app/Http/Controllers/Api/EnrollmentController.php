@@ -35,7 +35,12 @@ class EnrollmentController extends Controller
         abort_unless($user->canAccessOrganization((int) $data['organization_id']), 403);
 
         $org = \App\Models\Organization::findOrFail($data['organization_id']);
-        $enrollment = $enrollments->createConfiguratorEnrollment($org);
+
+        try {
+            $enrollment = $enrollments->createConfiguratorEnrollment($org);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         AuditLog::create([
             'user_id' => $user->id,
@@ -49,6 +54,7 @@ class EnrollmentController extends Controller
         return response()->json([
             'data' => $enrollment,
             'enrollment_url' => $enrollments->enrollmentUrl($enrollment),
+            'profile_endpoints' => $enrollments->profileEndpoints($enrollment),
         ], 201);
     }
 
@@ -61,6 +67,7 @@ class EnrollmentController extends Controller
         return response()->json([
             'data' => $enrollment,
             'enrollment_url' => $enrollments->enrollmentUrl($enrollment),
+            'profile_endpoints' => $enrollments->profileEndpoints($enrollment),
         ]);
     }
 }
