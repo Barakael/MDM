@@ -27,6 +27,7 @@ class DashboardController extends Controller
                 'online_devices' => (clone $deviceQuery)->where('is_online', true)->count(),
                 'pending_commands' => (clone $commandQuery)->whereIn('status', ['created', 'queued', 'sent'])->count(),
                 'mdm_engine' => config('mdm.engine'),
+                'mdm_reachable' => null,
             ],
         ]);
     }
