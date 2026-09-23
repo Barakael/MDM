@@ -117,14 +117,16 @@ export default function DeviceDetailPage() {
   }
 
   return (
-    <div>
+    <div className="min-w-0">
       <Link to="/devices" className="text-sm text-[var(--text-muted)] hover:text-white">
         ← Devices
       </Link>
 
-      <section className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/80 p-6">
-        <h1 className="text-3xl font-semibold tracking-tight">{device.device_name || 'Device'}</h1>
-        <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+      <section className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/80 p-4 sm:p-6">
+        <h1 className="break-words text-2xl font-semibold tracking-tight sm:text-3xl">
+          {device.device_name || 'Device'}
+        </h1>
+        <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <dt className="text-[var(--text-muted)]">Status</dt>
             <dd className="mt-1 font-medium">{device.is_online ? 'Online' : 'Offline'}</dd>
@@ -155,16 +157,16 @@ export default function DeviceDetailPage() {
               {device.last_contact_at ? new Date(device.last_contact_at).toLocaleString() : '—'}
             </dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-[var(--text-muted)]">UDID</dt>
-            <dd className="mt-1 font-mono text-xs">{device.udid || '—'}</dd>
+            <dd className="mt-1 break-all font-mono text-xs">{device.udid || '—'}</dd>
           </div>
-          <div>
+          <div className="min-w-0">
             <dt className="text-[var(--text-muted)]">APNs</dt>
             <dd className="mt-1 font-medium">
               {device.push?.has_token ? 'Token present' : 'No token'}
               {device.push?.topic ? (
-                <div className="mt-1 font-mono text-xs text-[var(--text-muted)] break-all">{device.push.topic}</div>
+                <div className="mt-1 break-all font-mono text-xs text-[var(--text-muted)]">{device.push.topic}</div>
               ) : null}
             </dd>
           </div>
@@ -173,13 +175,13 @@ export default function DeviceDetailPage() {
         <DeviceActionsPanel device={device} busy={busy} message={message} onAction={runAction} />
       </section>
 
-      <div className="mt-6 flex flex-wrap gap-2 border-b border-[var(--border)] pb-2">
+      <div className="-mx-1 mt-6 flex gap-2 overflow-x-auto border-b border-[var(--border)] px-1 pb-2 sm:flex-wrap sm:overflow-visible">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`rounded-md px-3 py-1.5 text-sm ${
+            className={`shrink-0 rounded-md px-3 py-1.5 text-sm ${
               tab === t.id ? 'bg-[var(--bg-muted)] text-white' : 'text-[var(--text-muted)] hover:text-white'
             }`}
           >
@@ -188,7 +190,7 @@ export default function DeviceDetailPage() {
         ))}
       </div>
 
-      <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/50 p-4">
+      <div className="mt-4 min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/50 p-4">
         {tab === 'information' && (
           <InfoGrid
             rows={[
@@ -264,39 +266,85 @@ function InfoGrid({ rows }: { rows: [string, string | null | undefined][] }) {
 function CommandsTable({ commands, highlightId }: { commands: Command[]; highlightId: number | null }) {
   if (!commands.length) return <p className="text-sm text-[var(--text-muted)]">No commands yet.</p>
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-left text-sm">
-        <thead className="text-[var(--text-muted)]">
-          <tr>
-            <th className="py-2 pr-4">Type</th>
-            <th className="py-2 pr-4">Status</th>
-            <th className="py-2 pr-4">Engine</th>
-            <th className="py-2 pr-4">Created</th>
-            <th className="py-2 pr-4">Sent</th>
-            <th className="py-2 pr-4">Completed</th>
-            <th className="py-2">Error</th>
-          </tr>
-        </thead>
-        <tbody>
-          {commands.map((c) => (
-            <tr
-              key={c.id}
-              className={`border-t border-[var(--border)] ${
-                highlightId === c.id ? 'bg-[var(--accent)]/10' : ''
-              }`}
-            >
-              <td className="py-2 pr-4">{commandTypeLabel(c.command_type)}</td>
-              <td className="py-2 pr-4 capitalize">{c.status}</td>
-              <td className="py-2 pr-4">{c.engine}</td>
-              <td className="py-2 pr-4">{new Date(c.created_at).toLocaleString()}</td>
-              <td className="py-2 pr-4">{c.sent_at ? new Date(c.sent_at).toLocaleString() : '—'}</td>
-              <td className="py-2 pr-4">{c.completed_at ? new Date(c.completed_at).toLocaleString() : '—'}</td>
-              <td className="py-2 text-[var(--danger)]">{c.error || '—'}</td>
+    <>
+      <div className="space-y-3 md:hidden">
+        {commands.map((c) => (
+          <article
+            key={c.id}
+            className={`rounded-lg border border-[var(--border)] p-3 text-sm ${
+              highlightId === c.id ? 'bg-[var(--accent)]/10' : 'bg-[var(--bg-muted)]/30'
+            }`}
+          >
+            <div className="font-medium">{commandTypeLabel(c.command_type)}</div>
+            <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <dt className="text-[var(--text-muted)]">Status</dt>
+                <dd className="mt-0.5 capitalize">{c.status}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Engine</dt>
+                <dd className="mt-0.5">{c.engine}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Created</dt>
+                <dd className="mt-0.5 text-[var(--text-muted)]">{new Date(c.created_at).toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Sent</dt>
+                <dd className="mt-0.5 text-[var(--text-muted)]">
+                  {c.sent_at ? new Date(c.sent_at).toLocaleString() : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[var(--text-muted)]">Completed</dt>
+                <dd className="mt-0.5 text-[var(--text-muted)]">
+                  {c.completed_at ? new Date(c.completed_at).toLocaleString() : '—'}
+                </dd>
+              </div>
+              {c.error && (
+                <div className="col-span-2">
+                  <dt className="text-[var(--text-muted)]">Error</dt>
+                  <dd className="mt-0.5 break-words text-[var(--danger)]">{c.error}</dd>
+                </div>
+              )}
+            </dl>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="min-w-full text-left text-sm">
+          <thead className="text-[var(--text-muted)]">
+            <tr>
+              <th className="py-2 pr-4">Type</th>
+              <th className="py-2 pr-4">Status</th>
+              <th className="py-2 pr-4">Engine</th>
+              <th className="py-2 pr-4">Created</th>
+              <th className="py-2 pr-4">Sent</th>
+              <th className="py-2 pr-4">Completed</th>
+              <th className="py-2">Error</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {commands.map((c) => (
+              <tr
+                key={c.id}
+                className={`border-t border-[var(--border)] ${
+                  highlightId === c.id ? 'bg-[var(--accent)]/10' : ''
+                }`}
+              >
+                <td className="py-2 pr-4">{commandTypeLabel(c.command_type)}</td>
+                <td className="py-2 pr-4 capitalize">{c.status}</td>
+                <td className="py-2 pr-4">{c.engine}</td>
+                <td className="py-2 pr-4">{new Date(c.created_at).toLocaleString()}</td>
+                <td className="py-2 pr-4">{c.sent_at ? new Date(c.sent_at).toLocaleString() : '—'}</td>
+                <td className="py-2 pr-4">{c.completed_at ? new Date(c.completed_at).toLocaleString() : '—'}</td>
+                <td className="py-2 text-[var(--danger)]">{c.error || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }
 
