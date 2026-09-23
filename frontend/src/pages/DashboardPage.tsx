@@ -46,16 +46,16 @@ export default function DashboardPage() {
   }
 
   return (
-    <div>
+    <div className="min-w-0">
       <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-      <p className="mt-1 text-[var(--text-muted)]">
+      <p className="mt-1 text-sm text-[var(--text-muted)] sm:text-base">
         Welcome back, {user?.name}. Global engine from .env:{' '}
-        <code className="text-[var(--accent)]">{data?.mdm_engine}</code>
+        <code className="break-all text-[var(--accent)]">{data?.mdm_engine}</code>
       </p>
 
       {mdm && (
         <div
-          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+          className={`mt-4 min-w-0 rounded-xl border px-4 py-3 text-sm ${
             mdm.reachable
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
               : 'border-[var(--danger)]/30 bg-[var(--danger)]/10 text-[var(--danger)]'
@@ -65,9 +65,12 @@ export default function DashboardPage() {
             NanoMDM: {mdm.reachable ? 'Connected' : 'Unreachable'}
             {mdm.error ? ` — ${mdm.error}` : ''}
           </div>
-          <div className="mt-1 opacity-90">
-            Public URL: {mdm.urls.public_url || '—'} · SCEP: {mdm.urls.scep_url || '—'} · Topic:{' '}
-            {mdm.urls.topic_configured ? mdm.urls.topic : 'not set'}
+          <div className="mt-1 break-all opacity-90">
+            Public URL: {mdm.urls.public_url || '—'}
+          </div>
+          <div className="mt-1 break-all opacity-90">SCEP: {mdm.urls.scep_url || '—'}</div>
+          <div className="mt-1 break-all opacity-90">
+            Topic: {mdm.urls.topic_configured ? mdm.urls.topic : 'not set'}
           </div>
           <div className="mt-1 opacity-80">
             Last webhook:{' '}
@@ -80,10 +83,10 @@ export default function DashboardPage() {
         {cards.map((card) => (
           <div
             key={card.label}
-            className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/70 p-5"
+            className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]/70 p-5"
           >
             <div className="text-sm text-[var(--text-muted)]">{card.label}</div>
-            <div className="mt-2 text-2xl font-semibold capitalize">{card.value}</div>
+            <div className="mt-2 break-words text-2xl font-semibold capitalize">{card.value}</div>
           </div>
         ))}
       </div>
