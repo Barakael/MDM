@@ -24,7 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->statefulApi();
+        // SPA uses Sanctum personal access tokens (Bearer), not cookie sessions.
+        // statefulApi() would require /sanctum/csrf-cookie and causes 419 on login.
         $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
